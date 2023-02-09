@@ -10,16 +10,7 @@ import (
 
 func main() {
 
-	items := []string{
-		"Nothing",
-		"Towel",
-		"Bed",
-		"TV",
-		"Baseball Bat",
-	}
-
-	monsters := game.GetMonsterList()
-
+	database := game.NewGameDatabase()
 	house := game.GetMap()
 
 	fmt.Printf("===================================\n")
@@ -37,13 +28,7 @@ func main() {
 	}
 	input = input[:len(input)-1]
 
-	player := game.Player{
-		Name:    input,
-		Life:    100,
-		Gold:    0,
-		Attack:  5,
-		Defense: 1,
-	}
+	player := game.NewPlayer(input, database)
 
 	roomName := "bathroom"
 	currentRoom := house[roomName]
@@ -55,7 +40,7 @@ func main() {
 
 		fmt.Printf("\nYou are in the %s\n", currentRoom.Name)
 
-		monster, ok := monsters[currentRoom.Monster]
+		monster, ok := database.Monsters[currentRoom.Monster]
 		if ok {
 			success := battle(reader, &player, &monster)
 			if !success {
@@ -85,8 +70,8 @@ func main() {
 			fmt.Printf("I can't understand you\n")
 		} else {
 			command := inputArray[0]
+			param := inputArray[1]
 			if command == "go" {
-				param := inputArray[1]
 				switch param {
 				case "north":
 					roomName = currentRoom.North
@@ -118,34 +103,53 @@ func main() {
 				}
 
 			} else if command == "look" {
-				fmt.Printf("You look around and see a %s\n", items[currentRoom.Item])
-			} else if command == "get" {
-				item := currentRoom.Item
-				if item == 0 {
-					fmt.Printf("There is nothing to get\n")
+				if param == "around" || param == "room" {
+					fmt.Printf("You look around and see:\n")
+					currentRoom.PrintObjects(database)
+					currentRoom.PrintInventory(database)
 				} else {
-					fmt.Printf("You picked up the %s\n", items[currentRoom.Item])
-					currentRoom.Item = 0
-					house[roomName] = currentRoom
-					player.Inventory = append(player.Inventory, item)
-				}
-			} else if command == "check" {
-				param := inputArray[1]
-				if param == "inventory" {
-					if len(player.Inventory) == 0 {
-						fmt.Printf("You aren't carrying anything.\n")
+					if currentRoom.HasObject(param, database) {
+						object := database.Objects[param]
+						fmt.Printf("You check the %s and find:\n", object.Name)
+						object.PrintInventory(database)
 					} else {
-						fmt.Printf("You are carrying:\n")
-						for index, itemNumber := range player.Inventory {
-							fmt.Printf("\t%d: %s\n", index+1, items[itemNumber])
-						}
+						fmt.Printf("%s doesn't exist\n", param)
 					}
-				} else if param == "life" {
-					fmt.Printf("You have %d HP\n", player.Life)
-				} else if param == "gold" {
-					fmt.Printf("You have %d gold\n", player.Gold)
+				}
+			} else if command == "get" {
+				if currentRoom.HasConsumable(param, database) {
+					currentRoom.RemoveConsumable(param, database)
+					house[roomName] = currentRoom
+					player.Consumables[param]++
+					fmt.Printf("You picked up %s\n", param)
+				} else if currentRoom.HasEquipable(param, database) {
+					currentRoom.RemoveEquipable(param, database)
+					house[roomName] = currentRoom
+					player.Equipables[param]++
+					fmt.Printf("You picked up %s\n", param)
+				} else {
+					fmt.Printf("You can't pick that up\n")
+				}
+			} else if command == "use" {
+				fmt.Printf("using %s\n", param)
+			} else if command == "equip" {
+				fmt.Printf("equipping %s\n", param)
+			} else if command == "check" {
+				if param == "inventory" {
+					player.PrintInventory(database)
+				} else if param == "status" {
+					fmt.Printf("Status:\n")
+					player.PrintStatus()
 				} else {
 					fmt.Printf("You can't check that!\n")
+				}
+			} else if command == "fly" {
+				roomName = param
+				nextRoom, ok := house[roomName]
+				if !ok {
+					fmt.Printf("You have gotten lost in the house!\n")
+				} else {
+					currentRoom = nextRoom
 				}
 			} else {
 				fmt.Printf("I don't understand '%s'\n", input)
